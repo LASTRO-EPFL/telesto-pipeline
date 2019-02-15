@@ -19,6 +19,6 @@ Python 3, package `pytelesto`.
 - ...
 
 
-**Orien nebula (M42) through the eye of Telesto**, by Guillaume Desprez.
+**Orion nebula (M42) through the eye of Telesto**, by Guillaume Desprez.
 
-![M42 by Telesto][examples/M42_red_guillaume.jpg]
+<img src="examples/M42_red_guillaume.jpg" alt="M42 by Telesto" width="500" align="middle"/>
