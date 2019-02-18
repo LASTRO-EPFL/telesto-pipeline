@@ -20,7 +20,7 @@ setup(
     version='0.0.1',
     description='Telesto reduction pipeline',
     long_description=read('README.md'),
-    author='LASTRO - EPFL',
+    author='LASTRO - EPFL, by TP-IVb students',
     author_email='lastro.epfl@gmail.com',
     url='https://github.com/LASTRO-EPFL/telesto-pipeline',
     download_url='https://github.com/LASTRO-EPFL/telesto-pipeline.git',
