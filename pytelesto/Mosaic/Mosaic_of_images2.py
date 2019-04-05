@@ -12,16 +12,18 @@ that :
 ##### Library #########################################################
 
 import numpy as np
-import astropy.io as astro
-import glob
+#import astropy.io as astro
+#import glob
+import matplotlib.pyplot as plt
+#import astropy.io.fits as pyfits
 import astroalign as aa
 
-from astropy.visualization import astropy_mpl_style
-from astropy.utils.data import get_pkg_data_filename
+#from astropy.visualization import astropy_mpl_style
+#from astropy.utils.data import get_pkg_data_filename
 from astropy.io import fits
-from astropy.wcs import WCS
-from astropy.io import ascii
-from astropy.table import Table, Column, MaskedColumn
+#from astropy.wcs import WCS
+#from astropy.io import ascii
+#from astropy.table import Table, Column, MaskedColumn
 
 ##### Data importation ###############################################
 
@@ -32,19 +34,15 @@ a single time, but compilation time of image_combination being big, we
 directly import the final combined images into the program.
 """
 
-image_file1 = get_pkg_data_filename('.\success_images\patch1_combined.fit')
-image_data1 = astro.fits.getdata(image_file1, ext=0)
-
-image_file2 = get_pkg_data_filename('.\success_images\patch2_combined.fit')
-image_data2 = astro.fits.getdata(image_file2, ext=0)
-
-image_file3 = get_pkg_data_filename('.\success_images\patch3_combined.fit')
-image_data3 = astro.fits.getdata(image_file3, ext=0)
-
-image_file4 = get_pkg_data_filename('.\success_images\patch4_combined.fit')
-image_data4 = astro.fits.getdata(image_file4, ext=0)
+image_data1 = fits.open('.\February 12 2019\patch1.00009674.UCAC3 191_45351.fit')[0].data
+image_data2 = fits.open('.\February 12 2019\patch2.00009686.UCAC3 191_44161.fit')[0].data
+image_data3 = fits.open('.\February 12 2019\patch3.00009698.Tycho 154_318.fit')[0].data
+image_data4 = fits.open('.\February 12 2019\patch4.00009711.Tycho 154_1116.fit')[0].data
 
 ##### Functions ##################################################
+
+disp_func = lambda x: np.log10(x)
+
 
 def save_image(image,name):
     """Save image in a new fits file to be open with ds9
@@ -56,17 +54,47 @@ def save_image(image,name):
             file
         name (string): name of the future file
     """
-    name = name + '.fit'
-    hdu = fits.PrimaryHDU(image)
-    hdul = fits.HDUList([hdu])
-    hdul.writeto(name)
+    if save_all_steps:
+        name = name + '.fit'
+        hdu = fits.PrimaryHDU(image)
+        hdul = fits.HDUList([hdu])
+        hdul.writeto(name, overwrite=True)
 
-def big_image(image, place):
+
+def fusion_of_2_images(im1, im2, rows, columns):
+    """Fusion (replacement) of a smaller one in a bigger one
+
+    Return the bigger image with a defined part replaced by the
+    smaller one.
+
+    Args:
+        im1 (array-like): the biggest image
+
+        im2 (array-like): the smallest image
+
+        rows (range): the row-range where im2 should corresponds
+            to im1.
+
+        columns (range)the column-range where im2 should corresponds
+            to im1.
+
+    Return:
+        im1 (array-like): the bigger image fusioned with the smaller
+            one.
+    """
+
+    im1[rows[0]:rows[len(rows)-1]+1, columns[0]:columns[len(columns)-1]+1] = im2
+    return im1
+
+
+def adding_frame_to_image(image, place):
     """Add pixels set to defaults around initial image
 
-    Return the new image (rectangle described below), placed in a much
-    bigger rectangle that have approximately the shape of the final
-    mosaic. And call save_image to save the new image.
+    Return a masked array of the new image (rectangle described below),
+    placed in a much bigger rectangle that have approximately the shape
+    of the final mosaic; and return also a mask of the big frame but with
+    the area corresponding to the initial image a little smaller (useful
+    for after). (Option: save the new image with save_image).
 
     Args:
         image (array-like): initial image that we want to align
@@ -75,37 +103,101 @@ def big_image(image, place):
             placed the image in the mosaic
 
     Returns:
-        image_bigger : initial image with bigger size, all new pixels
-            being set to default.
+        new_image (MaskedArray) : initial image with bigger size, all new
+            pixels being set to default. Mask set to False where the new
+            pixels have been added.
+
+        smaller_mask (array-like): mask of 0 and 1, the 1 correspond to
+            the area of the image exept a small portion (crop variable)
+            on the boarder. Wil be used to remove distorsions later on.
 
     """
-    image_bigger = np.copy(image_with_bigger_size)
+    image_with_frame = np.copy(frame)
 
+    mask_of_normal_size = np.copy(mask_normal_size)
+    mask_with_frame = np.copy(frame_mask)
+
+    smaller_mask = mask_with_frame * 0
+
+    # Cut the distorsion on the boarder of the initial image:
     image[:, 0:cut_boarder] = horizontal_boarder
     image[:, N[1] - cut_boarder:N[1]] = horizontal_boarder
     image[0:cut_boarder, :] = vertical_boarder
     image[(N[0] - cut_boarder):N[0], :] = vertical_boarder
 
     if place == 'top_right':
-        image_bigger[(N[0] - 1 + int(add_edges / 2)):(2 * N[0] - 1 + int(add_edges / 2)),
-        N[1] - 1 + int(add_edges / 2):(2 * N[1] - 1 + int(add_edges / 2))] = image
+        rows = range(N[0] - 1 + int(add_frame / 2), 2 * N[0] - 1 + int(add_frame / 2))
+        columns = range(N[1] - 1 + int(add_frame / 2), 2 * N[1] - 1 + int(add_frame / 2))
+
+        image_with_frame = fusion_of_2_images(image_with_frame, image, rows, columns)
+
+        mask_with_frame = fusion_of_2_images(mask_with_frame, mask_of_normal_size, rows, columns)
+
     if place == 'top_left':
-        image_bigger[(N[0] - 1 + int(add_edges / 2)):(2 * N[0] - 1 + int(add_edges / 2)),
-        int(add_edges / 2) - 1:(N[1] - 1 + int(add_edges / 2))] = image
+        rows = range(N[0] - 1 + int(add_frame / 2), 2 * N[0] - 1 + int(add_frame / 2))
+        columns = range(int(add_frame / 2) - 1, N[1] - 1 + int(add_frame / 2))
+
+        image_with_frame = fusion_of_2_images(image_with_frame, image, rows, columns)
+
+        mask_with_frame = fusion_of_2_images(mask_with_frame, mask_of_normal_size, rows, columns)
+
+        smaller_mask[(N[0] - 1 + int(add_frame/2) + crop):(2 * N[0] - 1 + int(add_frame/2)-crop),
+                     int(add_frame/2) - 1 + crop:(N[1] - 1 + int(add_frame/2) - crop)] = mask_of_ones_smaller_size
+
     if place == 'bottom_left':
-        image_bigger[int(add_edges / 2) - 1:(N[0] - 1 + int(add_edges / 2)),
-        int(add_edges / 2) - 1:(N[1] - 1 + int(add_edges / 2))] = image
+        rows = range(int(add_frame / 2) - 1, N[0] - 1 + int(add_frame / 2))
+        columns = range(int(add_frame / 2) - 1, N[1] - 1 + int(add_frame / 2))
+
+        image_with_frame = fusion_of_2_images(image_with_frame, image, rows, columns)
+
+        mask_with_frame = fusion_of_2_images(mask_with_frame, mask_of_normal_size, rows, columns)
+
+        smaller_mask[int(add_frame / 2) - 1 + crop:(N[0] - 1 + int(add_frame / 2) - crop),
+                     int(add_frame / 2) - 1 + crop:(N[1] - 1 + int(add_frame / 2) - crop)] = mask_of_ones_smaller_size
+
     if place == 'bottom_right':
-        image_bigger[int(add_edges / 2) - 1:(N[0] - 1 + int(add_edges / 2)),
-        N[1] - 1 + int(add_edges / 2):(2 * N[1] - 1 + int(add_edges / 2))] = image
+        rows = range(int(add_frame / 2) - 1, N[0] - 1 + int(add_frame / 2))
+        columns = range(N[1] - 1 + int(add_frame / 2), 2 * N[1] - 1 + int(add_frame / 2))
 
-    place = 'image_' + place
-    save_image(image_bigger, place)
+        image_with_frame = fusion_of_2_images(image_with_frame, image, rows, columns)
 
-    return image_bigger
+        mask_with_frame = fusion_of_2_images(mask_with_frame, mask_of_normal_size, rows, columns)
+
+        smaller_mask[int(add_frame / 2) - 1 + crop:(N[0] - 1 + int(add_frame / 2)-crop),
+                     N[1] - 1 + int(add_frame / 2) + crop:(2 * N[1] - 1 + int(add_frame / 2) - crop)] = mask_of_ones_smaller_size
+
+    place = 'image_with_frame_' + place
+    place_of_mask = place + '_mask'
+    save_image(image_with_frame, place)
+    save_image(mask_with_frame, place_of_mask)
+
+    new_image = np.ma.array(image_with_frame, mask=mask_with_frame)
+
+    return new_image, smaller_mask
 
 
-def alignment(source, target, name):
+def combine_image_with_mask(image, mask):
+    """
+
+    """
+    common_area = np.where(mask == 1)
+    new_im = np.copy(frame)
+    new_im[common_area] = image[common_area]
+
+    new_mask = frame_mask
+    new_mask[common_area] = mask[common_area]*0
+    # im = image.data
+    # M = im.shape
+    # for i in range(M[0]):
+    #     for j in range(M[1]):
+    #         if mask[i, j] == 0 and im[i, j] != default:
+    #             im[i, j] = default
+    # save_image(im-image, 'test')
+    new_im = np.ma.array(new_im, mask=new_mask)
+    return new_im
+
+
+def alignment(source, target, smaller_mask, name):
     """ Align 2 images at a time.
 
     Return the combination of source and target images
@@ -127,19 +219,32 @@ def alignment(source, target, name):
             target image.
 
     """
-    image_align = aa.register(source, target)
+    transf, (source_list, target_list) = aa.find_transform(source, target)
+    smaller_mask = aa.apply_transform(transf, smaller_mask, target)
+    save_image(smaller_mask, 'smaller_mask_' + name)
 
-    for i in range(len(image_align)):
-        for j in range(len(image_align[i])):
-            if (target[i, j] != default) and (image_align[i, j] != default):
-                image_align[i, j] = np.mean([image_align[i, j], target[i, j]])
-            if (target[i, j] != default) and (image_align[i, j] == default):
-                image_align[i, j] = target[i, j]
+    aligned_image = aa.apply_transform(transf, source, target)
+
+    image = combine_image_with_mask(aligned_image, smaller_mask)
+    save_image(aligned_image.data-image.data, 'test')
+
+    new_image = np.maximum(image.data, target.data)
+
+    # new_image = image.data + target.data
+    # save_image(new_image, 'test')
+    # common_area = np.where(((image.data > default) & (target.data > default)).all())
+    # print(common_area)
+    # new_image[common_area] = target.data[common_area]
+    # save_image(new_image, 'test2')
+
+    new_image_mask = image.mask & target.mask
+
+    mosaic = np.ma.array(new_image, mask=new_image_mask)
 
     name = 'image_align' + name
-    save_image(image_align, name)
+    save_image(new_image, name)
 
-    return image_align
+    return mosaic
 
 
 def cut_image(image):
@@ -165,6 +270,32 @@ def cut_image(image):
     # vertical line that have only default values in order to
     # remove them later. Same thing done starting from the right
     # boarder, top and bottom boarder.
+
+    # default_area_vertical = np.where(image == vertical_default)
+    # print(default_area_vertical)
+    # default_area_horizontal = np.where(image == horizontal_default)
+    #
+    # while i < N[0]:
+    #     i = i + 1
+    #
+    # j = M[0]-1
+    # while (image[j, :] == vertical_default).all():
+    #     j = j - 1
+    #
+    # k = 0
+    # while (image[:, k] == horizontal_default).all():
+    #     k = k + 1
+    #
+    # l = M[1]-1
+    # while (image[:, l] == horizontal_default).all():
+    #     l = l - 1
+    #
+    # image_cut = np.copy(image[i:j, k:l])
+
+
+
+    #image_cut = image[default_area_vertical, default_area_horizontal]
+
     while (image[i, :] == vertical_default).all():
         i = i + 1
 
@@ -185,165 +316,147 @@ def cut_image(image):
     return image_cut
 
 
-def final_cut(image):
-    """Final purification of the image with all default values
-        removed
-
-    Return the mosaic image with the right boarders, all bands
-    that still contain partly default values are removed.
-
-    Args:
-         image (array-like): mosaic of image that has been
-            firstly cut with function cut image. The only
-            bands that remain are the one partly equal to
-            default.
-
-    Return:
-        image (array-like): Return the final image, a
-            combination of 4 images that superpose partly
-            and that has been reframed correctly.
-
-    """
-
-    # Starting from the bottom-left corner we count the number
-    # of pixels on a diagonal of a square with default values.
-    # We search for the maximal diagonal possible for the square
-    # to be only composed of pixels set to default. Then, we
-    # check the direction of the band to be removed. If its
-    # vertical, we removed it and then redo the same process,
-    # in case there is also an horizontal band to removed.
-    if image[0, 0] == default:
-        index = 1
-        while image[index, index] == default:
-            index = index + 1
-        if image[index + 1, index] != default:
-            image = image[:, index:-1]
-            save_image(image, '1')
-            if image[0, 0] == default:
-                index = 1
-                while image[index, index] == default:
-                    index = index + 1
-                image = image[index:-1, :]
-                save_image(image, '2')
-        else:
-            image = image[index:-1, :]
-            save_image(image, '3')
-            if image[0, 0] == default:
-                index = 1
-                while image[index, index] == default:
-                    index = index + 1
-                image = image[:, index:-1]
-                save_image(image, '4')
-
-    if image[image.shape[0]-1, 0] == default:
-        index1 = image.shape[0] - 2
-        index2 = 1
-        while image[index1, index2] == default:
-            index1 = index1 - 1
-            index2 = index2 + 1
-        if image[index1 - 1, index2] != default:
-            image = image[:, index2:-1]
-            save_image(image, '5')
-            if image[image.shape[0]-1, 0] == default:
-                index1 = image.shape[0] - 2
-                index2 = 1
-                while image[index1, index2] == default:
-                    index1 = index1 - 1
-                    index2 = index2 + 1
-                image = image[0:index1, :]
-                save_image(image, '6')
-
-        else:
-            image = image[0:index1, :]
-            save_image(image, '7')
-            if image[image.shape[0]-1, 0] == default:
-                index1 = image.shape[0] - 2
-                index2 = 1
-                while image[index1, index2] == default:
-                    index1 = index1 - 1
-                    index2 = index2 + 1
-                image = image[:, index2:-1]
-                save_image(image, '8')
-
-    if image[0, image.shape[1]-1] == default:
-        index1 = 1
-        index2 = image.shape[1] - 2
-        while image[index1, index2] == default:
-            index1 = index1 + 1
-            index2 = index2 - 1
-        if image[index1 + 1, index2] != default:
-            image = image[:, 0:index2]
-            save_image(image, '9')
-            if image[0, image.shape[1]-1] == default:
-                index1 = 1
-                index2 = image.shape[1] - 2
-                while image[index1, index2] == default:
-                    index1 = index1 + 1
-                    index2 = index2 - 1
-                image = image[index1:-1, :]
-                save_image(image, '10')
-        else:
-            image = image[index1:-1 :]
-            save_image(image, '11')
-            if image[image.shape[0]-1, 0] == default:
-                index1 = 1
-                index2 = image.shape[1] - 2
-                while image[index1, index2] == default:
-                    index1 = index1 + 1
-                    index2 = index2 - 1
-                image = image[:, 0:index2]
-                save_image(image, '12')
-
-    if image[image.shape[0]-1, image.shape[1]-1] == default:
-        index1 = image.shape[0] - 2
-        index2 = image.shape[1] - 2
-        while image[index1, index2] == default:
-            index1 = index1 - 1
-            index2 = index2 - 1
-        if image[index1 - 1, index2] != default:
-            image = image[:, 0:index2]
-            save_image(image, '13')
-            if image[image.shape[0]-1, image.shape[1]-1] == default:
-                index1 = image.shape[0] - 2
-                index2 = image.shape[1] - 2
-                while image[index1, index2] == default:
-                    index1 = index1 - 1
-                    index2 = index2 - 1
-                image = image[0:index1, :]
-                save_image(image, '14')
-        else:
-            image = image[0:index1, :]
-            save_image(image, '15')
-            if image[image.shape[0]-1, image.shape[1]-1] == default:
-                index1 = image.shape[0] - 2
-                index2 = image.shape[1] - 2
-                while image[index1, index2] == default:
-                    index1 = index1 - 1
-                    index2 = index2 - 1
-                image = image[:, 0: index2]
-                save_image(image, '16')
-
-        save_image(image, 'mosaic')
-
-    return image
-
-
 # def final_cut(image):
-
-    # while image[0, 0] == default:
-    #     image = image[1:-1, 1:-1]
-    # save_image(image,'1')
-    # while image[image.shape[0]-1, 0] == default:
-    #     image = image[0:image.shape[0]-2, 1:-1]
-    # save_image(image,'2')
-    # while image[0, image.shape[1]-1] == default:
-    #     image = image[1:-1, 0:image.shape[1]-2]
-    # save_image(image,'3')
-    # while image[image.shape[0]-1, image.shape[1]-1] == default:
-    #     image = image[0:image.shape[0]-2, 0:image.shape[1]-2]
-    # save_image(image, 'final')
-    # return image
-
+#     """Final purification of the image with all default values
+#         removed
+#
+#     Return the mosaic image with the right boarders, all bands
+#     that still contain partly default values are removed.
+#
+#     Args:
+#          image (array-like): mosaic of image that has been
+#             firstly cut with function cut image. The only
+#             bands that remain are the one partly equal to
+#             default.
+#
+#     Return:
+#         image (array-like): Return the final image, a
+#             combination of 4 images that superpose partly
+#             and that has been reframed correctly.
+#
+#     """
+#
+#     # Starting from the bottom-left corner we count the number
+#     # of pixels on a diagonal of a square with default values.
+#     # We search for the maximal diagonal possible for the square
+#     # to be only composed of pixels set to default. Then, we
+#     # check the direction of the band to be removed. If its
+#     # vertical, we removed it and then redo the same process,
+#     # in case there is also an horizontal band to removed.
+#     if image[0, 0] == default:
+#         index = 1
+#         while image[index, index] == default:
+#             index = index + 1
+#         if image[index + 1, index] != default:
+#             image = image[:, index:-1]
+#             save_image(image, '1')
+#             if image[0, 0] == default:
+#                 index = 1
+#                 while image[index, index] == default:
+#                     index = index + 1
+#                 image = image[index:-1, :]
+#                 save_image(image, '2')
+#         else:
+#             image = image[index:-1, :]
+#             save_image(image, '3')
+#             if image[0, 0] == default:
+#                 index = 1
+#                 while image[index, index] == default:
+#                     index = index + 1
+#                 image = image[:, index:-1]
+#                 save_image(image, '4')
+#
+#     if image[image.shape[0]-1, 0] == default:
+#         index1 = image.shape[0] - 2
+#         index2 = 1
+#         while image[index1, index2] == default:
+#             index1 = index1 - 1
+#             index2 = index2 + 1
+#         if image[index1 - 1, index2] != default:
+#             image = image[:, index2:-1]
+#             save_image(image, '5')
+#             if image[image.shape[0]-1, 0] == default:
+#                 index1 = image.shape[0] - 2
+#                 index2 = 1
+#                 while image[index1, index2] == default:
+#                     index1 = index1 - 1
+#                     index2 = index2 + 1
+#                 image = image[0:index1, :]
+#                 save_image(image, '6')
+#
+#         else:
+#             image = image[0:index1, :]
+#             save_image(image, '7')
+#             if image[image.shape[0]-1, 0] == default:
+#                 index1 = image.shape[0] - 2
+#                 index2 = 1
+#                 while image[index1, index2] == default:
+#                     index1 = index1 - 1
+#                     index2 = index2 + 1
+#                 image = image[:, index2:-1]
+#                 save_image(image, '8')
+#
+#     if image[0, image.shape[1]-1] == default:
+#         index1 = 1
+#         index2 = image.shape[1] - 2
+#         while image[index1, index2] == default:
+#             index1 = index1 + 1
+#             index2 = index2 - 1
+#         if image[index1 + 1, index2] != default:
+#             image = image[:, 0:index2]
+#             save_image(image, '9')
+#             if image[0, image.shape[1]-1] == default:
+#                 index1 = 1
+#                 index2 = image.shape[1] - 2
+#                 while image[index1, index2] == default:
+#                     index1 = index1 + 1
+#                     index2 = index2 - 1
+#                 image = image[index1:-1, :]
+#                 save_image(image, '10')
+#         else:
+#             image = image[index1:-1 :]
+#             save_image(image, '11')
+#             if image[image.shape[0]-1, 0] == default:
+#                 index1 = 1
+#                 index2 = image.shape[1] - 2
+#                 while image[index1, index2] == default:
+#                     index1 = index1 + 1
+#                     index2 = index2 - 1
+#                 image = image[:, 0:index2]
+#                 save_image(image, '12')
+#
+#     if image[image.shape[0]-1, image.shape[1]-1] == default:
+#         index1 = image.shape[0] - 2
+#         index2 = image.shape[1] - 2
+#         while image[index1, index2] == default:
+#             index1 = index1 - 1
+#             index2 = index2 - 1
+#         if image[index1 - 1, index2] != default:
+#             image = image[:, 0:index2]
+#             save_image(image, '13')
+#             if image[image.shape[0]-1, image.shape[1]-1] == default:
+#                 index1 = image.shape[0] - 2
+#                 index2 = image.shape[1] - 2
+#                 while image[index1, index2] == default:
+#                     index1 = index1 - 1
+#                     index2 = index2 - 1
+#                 image = image[0:index1, :]
+#                 save_image(image, '14')
+#         else:
+#             image = image[0:index1, :]
+#             save_image(image, '15')
+#             if image[image.shape[0]-1, image.shape[1]-1] == default:
+#                 index1 = image.shape[0] - 2
+#                 index2 = image.shape[1] - 2
+#                 while image[index1, index2] == default:
+#                     index1 = index1 - 1
+#                     index2 = index2 - 1
+#                 image = image[:, 0: index2]
+#                 save_image(image, '16')
+#
+#         save_image(image, 'mosaic')
+#
+#     return image
 
 ##### Main ################################################################
 
@@ -357,53 +470,63 @@ has an offset in both x and y direction. The new pixels, surrounding
 the initial image are fixed to a default value (must be much bigger
 than 0 so it works).
 """
-
+save_all_steps = True
 N = image_data1.shape  # Suppose all images have the same shape
-add_edges = 400
-default = 1000  # amélioration: idée, pour que ce ne soit pas vu comme du bruit, utiliser la moyenne des valeurs des pixels
+add_frame = 400
+crop = 20
+default = 0  # amélioration: idée, pour que ce ne soit pas vu comme du bruit, utiliser la moyenne des valeurs des pixels
                 # de l'image comme défault
-cut_boarder = 20  # The boarder of initial images are too noisy, so we cut them a bit to decrease the noise bands in
+cut_boarder = 50  # The boarder of initial images are too noisy, so we cut them a bit to decrease the noise bands in
                   # between all images when thay will be aligned.
 
-image_with_bigger_size = np.ones((2 * N[0] + add_edges, 2 * N[1] + add_edges), dtype='f')
-n = image_with_bigger_size.shape
+frame = np.ones((2 * N[0] + add_frame, 2 * N[1] + add_frame), dtype='f')*default  # image_with_bigger_size
 
-for i in range(len(image_with_bigger_size)):
-    for j in range(len(image_with_bigger_size[i])):
-        image_with_bigger_size[i, j] = default
+frame_mask = np.ones((2 * N[0] + add_frame, 2 * N[1] + add_frame), dtype='int')  # image_with_bigger_size_mask
+
+mask_normal_size = np.zeros((N[0], N[1]), dtype='int') # image normal size
+
+mask_of_ones_smaller_size = np.ones((N[0]-crop*2, N[1]-crop*2), dtype='int')
 
 # To cut the boarder of the initial images, replace it with a rectangular boarder with all pixels
 # set to default:
-horizontal_boarder = np.zeros((N[0], cut_boarder), dtype='f')
-vertical_boarder = np.zeros((cut_boarder, N[1]), dtype='f')
-for i in range(len(horizontal_boarder)):
-    for j in range(len(horizontal_boarder[i])):
-        horizontal_boarder[i, j] = default
+horizontal_boarder = np.ones((N[0], cut_boarder), dtype='f')*default
+vertical_boarder = np.ones((cut_boarder, N[1]), dtype='f')*default
 
-for i in range(len(vertical_boarder)):
-    for j in range(len(vertical_boarder[i])):
-        vertical_boarder[i, j] = default
+image_top_right, smaller_mask_top_right = adding_frame_to_image(image_data1, 'top_right')
+image_top_left, smaller_mask_top_left = adding_frame_to_image(image_data2, 'top_left')
+image_bottom_left, smaller_mask_bottom_left = adding_frame_to_image(image_data3, 'bottom_left')
+image_bottom_right, smaller_mask_bottom_right = adding_frame_to_image(image_data4, 'bottom_right')
 
-# not necessary : can all be implemented so each function is calling the other
-image_top_right = big_image(image_data1, 'top_right')
-image_top_left = big_image(image_data2, 'top_left')
-image_bottom_left = big_image(image_data3, 'bottom_left')
-image_bottom_right = big_image(image_data4, 'bottom_right')
 
-image_align1_2 = alignment(image_top_left, image_top_right, '1_2')
-image_align1_2_3 = alignment(image_bottom_left, image_align1_2, '1_2_3')
-image_align1_2_3_4 = alignment(image_bottom_right, image_align1_2_3, '1_2_3_4')
+fig, axes = plt.subplots(2, 2, figsize=(10, 10))
+ax = axes[0, 0]
+ax.imshow(disp_func(image_top_left), origin='lower', cmap='gist_stern')
+ax = axes[0, 1]
+ax.imshow(disp_func(image_top_right), origin='lower', cmap='gist_stern')
+ax = axes[1, 0]
+ax.imshow(disp_func(image_bottom_left), origin='lower', cmap='gist_stern')
+ax = axes[1, 1]
+ax.imshow(disp_func(image_bottom_right), origin='lower', cmap='gist_stern')
 
-N = image_align1_2_3_4.shape
-horizontal_default = np.zeros((N[0], 1), dtype='f')
-vertical_default = np.zeros((1, N[1]), dtype='f')
+plt.show()
 
-for i in range(len(horizontal_default)):  # method can be reduced, using previous horizontal band created
-        horizontal_default[i] = default
+combined_image_of_tops = alignment(image_top_left, image_top_right, smaller_mask_top_left, '_tops')
+combined_image_of_tops_and_bottom = alignment(image_bottom_left, combined_image_of_tops, smaller_mask_bottom_left, '_tops_and_bottom')
+combined_image_of_tops_and_bottoms = alignment(image_bottom_right, combined_image_of_tops_and_bottom, smaller_mask_bottom_right, '_tops_and_bottoms')
 
-for i in range(len(vertical_default)):
-        vertical_default[i] = default
+fig, axes = plt.subplots(2, 2, figsize=(10, 10))
+ax = axes[0, 0]
+ax.imshow(disp_func(combined_image_of_tops), origin='lower', cmap='gist_stern')
+ax = axes[0, 1]
+ax.imshow(disp_func(combined_image_of_tops_and_bottom), origin='lower', cmap='gist_stern')
+ax = axes[1, 0]
+ax.imshow(disp_func(combined_image_of_tops_and_bottoms), origin='lower', cmap='gist_stern')
 
-image_cut_intermediate = cut_image(image_align1_2_3_4)  # not necessary
-final_mosaic = final_cut(image_cut_intermediate)  # not necessary
+plt.show()
+
+horizontal_default = np.zeros((N[0], 1), dtype='f') * default
+vertical_default = np.zeros((1, N[1]), dtype='f') * default
+
+final_mosaic = cut_image(combined_image_of_tops_and_bottoms.data)
+#final_mosaic = final_cut(image_cut_intermediate)  # not necessary
 
