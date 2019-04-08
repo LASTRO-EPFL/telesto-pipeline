@@ -44,9 +44,11 @@ image_data4 = fits.open('.\February 12 2019\patch4.00009711.Tycho 154_1116.fit')
 disp_func = lambda x: np.log10(x)
 
 
-def save_image(image,name):
+def save_image(image, name):
     """Save image in a new fits file to be open with ds9
+
     Do not return anything as it is only succession of actions.
+
     Args:
         image (array-like): image that we want to save in a new
             file
@@ -61,15 +63,21 @@ def save_image(image,name):
 
 def fusion_of_2_images(im1, im2, rows, columns):
     """Fusion (replacement) of a smaller one in a bigger one
+
     Return the bigger image with a defined part replaced by the
     smaller one.
+
     Args:
         im1 (array-like): the biggest image
+
         im2 (array-like): the smallest image
+
         rows (range): the row-range where im2 should corresponds
             to im1.
+
         columns (range)the column-range where im2 should corresponds
             to im1.
+
     Return:
         im1 (array-like): the bigger image fusioned with the smaller
             one.
@@ -79,25 +87,38 @@ def fusion_of_2_images(im1, im2, rows, columns):
     return im1
 
 
+def cut_distorsion_of_boarder(image, h_boarder, v_boarder):
+    image[:, 0:cut_boarder] = h_boarder
+    image[:, N[1] - cut_boarder:N[1]] = h_boarder
+    image[0:cut_boarder, :] = v_boarder
+    image[(N[0] - cut_boarder):N[0], :] = v_boarder
+    return image
+
+
 def adding_frame_to_image(image, place):
     """Add pixels set to defaults around initial image
+
     Return a masked array of the new image (rectangle described below),
     placed in a much bigger rectangle that have approximately the shape
     of the final mosaic; and return also a mask of the big frame but with
     the area corresponding to the initial image a little smaller (useful
     for after). (Option: save the new image with save_image).
+
     Args:
         image (array-like): initial image that we want to align
         place (string) : 'top_right' , 'top_left', 'bottom_right'
            'bottom_left', depending on where should approximately
             placed the image in the mosaic
+
     Returns:
         new_image (MaskedArray) : initial image with bigger size, all new
             pixels being set to default. Mask set to False where the new
             pixels have been added.
+
         smaller_mask (array-like): mask of 0 and 1, the 1 correspond to
             the area of the image exept a small portion (crop variable)
             on the boarder. Wil be used to remove distorsions later on.
+
     """
     image_with_frame = np.copy(frame)
 
@@ -107,10 +128,10 @@ def adding_frame_to_image(image, place):
     smaller_mask = mask_with_frame * 0
 
     # Cut the distorsion on the boarder of the initial image:
-    image[:, 0:cut_boarder] = horizontal_boarder
-    image[:, N[1] - cut_boarder:N[1]] = horizontal_boarder
-    image[0:cut_boarder, :] = vertical_boarder
-    image[(N[0] - cut_boarder):N[0], :] = vertical_boarder
+    image = cut_distorsion_of_boarder(image, horizontal_boarder*default, vertical_boarder*default)
+    save_image(image+mask_of_normal_size, 'test')
+    mask_of_normal_size = cut_distorsion_of_boarder(mask_of_normal_size, horizontal_boarder, vertical_boarder)
+    save_image(image+mask_of_normal_size, 'test_2')
 
     if place == 'top_right':
         rows = range(N[0] - 1 + int(add_frame / 2), 2 * N[0] - 1 + int(add_frame / 2))
@@ -165,6 +186,7 @@ def adding_frame_to_image(image, place):
 
 def combine_image_with_mask(image, mask):
     """
+
     """
     common_area = np.where(mask == 1)
     new_im = np.copy(frame)
@@ -185,10 +207,12 @@ def combine_image_with_mask(image, mask):
 
 def alignment(source, target, smaller_mask, name):
     """ Align 2 images at a time.
+
     Return the combination of source and target images
     aligned with each other. Firstly, align source on
     target. Then re-add target image on align image.
     Call save_image to save the final image.
+
     Args:
         source (array-like): A numpy array of the source image to be
             transformed, its pixels will match the ones of the target
@@ -197,29 +221,90 @@ def alignment(source, target, smaller_mask, name):
             image.
         name (string): Name of the future file, that is a saving of the
             final image.
+
     Returns:
         image_align : The new image, combination of the source and
             target image.
+
     """
     transf, (source_list, target_list) = aa.find_transform(source, target)
-    smaller_mask = aa.apply_transform(transf, smaller_mask, target)
-    save_image(smaller_mask, 'smaller_mask_' + name)
+    # smaller_mask = aa.apply_transform(transf, smaller_mask, target)
+    # save_image(smaller_mask, 'smaller_mask_' + name)
 
     aligned_image = aa.apply_transform(transf, source, target)
 
-    image = combine_image_with_mask(aligned_image, smaller_mask)
-    save_image(aligned_image.data-image.data, 'test')
+    save_image(aligned_image, 'test4' + name)
+    #image = combine_image_with_mask(aligned_image.data, smaller_mask)
 
-    new_image = np.maximum(image.data, target.data)
+    #negative_pixels = np.where(image < 0)
+    #image[negative_pixels] = image[negative_pixels]*default
+    #save_image(image[negative_pixels], 'baba' + name)
+    #print(image[negative_pixels].shape)
+    #save_image(image.data, 'test' + name)
 
-    # new_image = image.data + target.data
-    # save_image(new_image, 'test')
-    # common_area = np.where(((image.data > default) & (target.data > default)).all())
-    # print(common_area)
-    # new_image[common_area] = target.data[common_area]
-    # save_image(new_image, 'test2')
+    mask_image = aa.apply_transform(transf, source.mask, target)
 
-    new_image_mask = image.mask & target.mask
+    save_image(mask_image, 'aloha' + name)
+    dark_area = np.where(mask_image == 0)
+
+
+    # print(dark_area)
+    # new_x = []
+    # new_y = []
+    # n = dark_area[0][0]
+    # i = 1
+    # first_line = dark_area[0][0]
+    # last_line = dark_area[0][-1]
+    # while i < (len(dark_area[0])-1):
+    #     if dark_area[0][i-1] == dark_area[0][i] & dark_area[0][i+1] == dark_area[0][i]: # & dark_area[0][i] != last_line:
+    #         new_x.append(dark_area[0][i])
+    #         new_y.append(dark_area[1][i])
+    #
+    #     i += 1
+    #
+    # im = image[(new_x, new_y)]
+
+    #for x in dark_area[0]:
+        #while x = n:
+
+
+
+    # first_x = dark_area[0]
+    # x_index = set(dark_area[0])
+    # y_index = set(dark_area[1])
+    # width = len(x_index)
+    # hight = len(y_index)
+    # im = np.zeros((width, hight), dtype='f')
+    # im = np.reshape(image[dark_area], (width, hight))
+    #save_image(im, 'mmm' + name)
+    new = np.copy(frame_mask)*0
+    new[dark_area] = aligned_image[dark_area]  #image
+    #new[(new_x, new_y)] = im
+    save_image(new, 'new' + name)
+
+    # im[0, :] = im[0, :] * 0
+    # im[M[0], :] = im[M[0], :] * 0
+    # im[:, 0] = im[:, 0] * 0
+    # im[:, M[1]] = im[:, M[1]] * 0
+    # save_image(im, 'mmm1' + name)
+    # image[dark_area] = im
+    #save_image(im, 'mmm2' + name)
+
+    #new_image = np.maximum(image.data, target.data)
+    #save_image(target.data, 'essai1' + name)
+    new_image = new + target.data #image.date
+    #save_image(new_image, 'essai'+ name)
+    common_area = np.where((new > default) & (target.data > default)) #image.data
+    #print(common_area)
+    new_image[common_area] = new_image[common_area]/2.#target.data[common_area]
+    save_image(new_image, 'test2')
+
+    mask_source = np.where(mask_image == 0)
+    mask_target = np.where(target.mask == 0)
+    new_image_mask = np.copy(frame_mask)
+    new_image_mask[mask_source] = mask_image[mask_source]
+    new_image_mask[mask_target] = target.mask[mask_target]
+    #new_image_mask = image.mask & target.mask
 
     mosaic = np.ma.array(new_image, mask=new_image_mask)
 
@@ -231,16 +316,20 @@ def alignment(source, target, smaller_mask, name):
 
 def cut_image(image):
     """Cut the full bands set to default in the image
+
     Return the first cut of the image. The bands fully equal to
     default along the total width or total length of the image
     are removed.
+
     Args:
         image (array-like): Mosaic of the images, sticks on
             a bigger rectangle with all pixels set to default.
+
     Return:
         image (array-like): Initial image for which the horizontal
             and vertical bands with value default have been
             removed.
+
     """
     M = image.shape
     i = 0
@@ -274,22 +363,22 @@ def cut_image(image):
 
     #image_cut = image[default_area_vertical, default_area_horizontal]
 
-    while (image[i, :] == vertical_default).all():
+    while np.all(image[i, :] == vertical_default):
         i = i + 1
 
     j = M[0]-1
-    while (image[j, :] == vertical_default).all():
+    while np.all(image[j, :] == vertical_default):
         j = j - 1
 
     k = 0
-    while (image[:, k] == horizontal_default).all():
+    while np.all(image[:, k] == horizontal_default):
         k = k + 1
 
-    l = M[1]-1
-    while (image[:, l] == horizontal_default).all():
-        l = l - 1
+    m = M[1]-1
+    while np.all(image[:, m] == horizontal_default):
+        m = m - 1
 
-    image_cut = np.copy(image[i:j, k:l])
+    image_cut = np.copy(image[i:j, k:m])
     save_image(image_cut, 'image_cut')
     return image_cut
 
@@ -450,6 +539,7 @@ than 0 so it works).
 """
 save_all_steps = True
 N = image_data1.shape  # Suppose all images have the same shape
+print(N)
 add_frame = 400
 crop = 20
 default = 0  # amélioration: idée, pour que ce ne soit pas vu comme du bruit, utiliser la moyenne des valeurs des pixels
@@ -461,14 +551,14 @@ frame = np.ones((2 * N[0] + add_frame, 2 * N[1] + add_frame), dtype='f')*default
 
 frame_mask = np.ones((2 * N[0] + add_frame, 2 * N[1] + add_frame), dtype='int')  # image_with_bigger_size_mask
 
-mask_normal_size = np.zeros((N[0], N[1]), dtype='int') # image normal size
+mask_normal_size = np.zeros((N[0], N[1]), dtype='int')  # image normal size
 
 mask_of_ones_smaller_size = np.ones((N[0]-crop*2, N[1]-crop*2), dtype='int')
 
 # To cut the boarder of the initial images, replace it with a rectangular boarder with all pixels
 # set to default:
-horizontal_boarder = np.ones((N[0], cut_boarder), dtype='f')*default
-vertical_boarder = np.ones((cut_boarder, N[1]), dtype='f')*default
+horizontal_boarder = np.ones((N[0], cut_boarder), dtype='f')
+vertical_boarder = np.ones((cut_boarder, N[1]), dtype='f')
 
 image_top_right, smaller_mask_top_right = adding_frame_to_image(image_data1, 'top_right')
 image_top_left, smaller_mask_top_left = adding_frame_to_image(image_data2, 'top_left')
@@ -488,7 +578,7 @@ ax.imshow(disp_func(image_bottom_right), origin='lower', cmap='gist_stern')
 
 plt.show()
 
-combined_image_of_tops = alignment(image_top_left, image_top_right, smaller_mask_top_left, '_tops')
+combined_image_of_tops = alignment(image_top_left, image_top_right,smaller_mask_top_left, '_tops')
 combined_image_of_tops_and_bottom = alignment(image_bottom_left, combined_image_of_tops, smaller_mask_bottom_left, '_tops_and_bottom')
 combined_image_of_tops_and_bottoms = alignment(image_bottom_right, combined_image_of_tops_and_bottom, smaller_mask_bottom_right, '_tops_and_bottoms')
 
@@ -507,3 +597,4 @@ vertical_default = np.zeros((1, N[1]), dtype='f') * default
 
 final_mosaic = cut_image(combined_image_of_tops_and_bottoms.data)
 #final_mosaic = final_cut(image_cut_intermediate)  # not necessary
+
