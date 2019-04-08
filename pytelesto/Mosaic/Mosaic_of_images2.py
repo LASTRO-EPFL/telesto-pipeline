@@ -46,9 +46,7 @@ disp_func = lambda x: np.log10(x)
 
 def save_image(image,name):
     """Save image in a new fits file to be open with ds9
-
     Do not return anything as it is only succession of actions.
-
     Args:
         image (array-like): image that we want to save in a new
             file
@@ -63,21 +61,15 @@ def save_image(image,name):
 
 def fusion_of_2_images(im1, im2, rows, columns):
     """Fusion (replacement) of a smaller one in a bigger one
-
     Return the bigger image with a defined part replaced by the
     smaller one.
-
     Args:
         im1 (array-like): the biggest image
-
         im2 (array-like): the smallest image
-
         rows (range): the row-range where im2 should corresponds
             to im1.
-
         columns (range)the column-range where im2 should corresponds
             to im1.
-
     Return:
         im1 (array-like): the bigger image fusioned with the smaller
             one.
@@ -89,28 +81,23 @@ def fusion_of_2_images(im1, im2, rows, columns):
 
 def adding_frame_to_image(image, place):
     """Add pixels set to defaults around initial image
-
     Return a masked array of the new image (rectangle described below),
     placed in a much bigger rectangle that have approximately the shape
     of the final mosaic; and return also a mask of the big frame but with
     the area corresponding to the initial image a little smaller (useful
     for after). (Option: save the new image with save_image).
-
     Args:
         image (array-like): initial image that we want to align
         place (string) : 'top_right' , 'top_left', 'bottom_right'
            'bottom_left', depending on where should approximately
             placed the image in the mosaic
-
     Returns:
         new_image (MaskedArray) : initial image with bigger size, all new
             pixels being set to default. Mask set to False where the new
             pixels have been added.
-
         smaller_mask (array-like): mask of 0 and 1, the 1 correspond to
             the area of the image exept a small portion (crop variable)
             on the boarder. Wil be used to remove distorsions later on.
-
     """
     image_with_frame = np.copy(frame)
 
@@ -178,7 +165,6 @@ def adding_frame_to_image(image, place):
 
 def combine_image_with_mask(image, mask):
     """
-
     """
     common_area = np.where(mask == 1)
     new_im = np.copy(frame)
@@ -199,12 +185,10 @@ def combine_image_with_mask(image, mask):
 
 def alignment(source, target, smaller_mask, name):
     """ Align 2 images at a time.
-
     Return the combination of source and target images
     aligned with each other. Firstly, align source on
     target. Then re-add target image on align image.
     Call save_image to save the final image.
-
     Args:
         source (array-like): A numpy array of the source image to be
             transformed, its pixels will match the ones of the target
@@ -213,11 +197,9 @@ def alignment(source, target, smaller_mask, name):
             image.
         name (string): Name of the future file, that is a saving of the
             final image.
-
     Returns:
         image_align : The new image, combination of the source and
             target image.
-
     """
     transf, (source_list, target_list) = aa.find_transform(source, target)
     smaller_mask = aa.apply_transform(transf, smaller_mask, target)
@@ -249,20 +231,16 @@ def alignment(source, target, smaller_mask, name):
 
 def cut_image(image):
     """Cut the full bands set to default in the image
-
     Return the first cut of the image. The bands fully equal to
     default along the total width or total length of the image
     are removed.
-
     Args:
         image (array-like): Mosaic of the images, sticks on
             a bigger rectangle with all pixels set to default.
-
     Return:
         image (array-like): Initial image for which the horizontal
             and vertical bands with value default have been
             removed.
-
     """
     M = image.shape
     i = 0
@@ -529,4 +507,3 @@ vertical_default = np.zeros((1, N[1]), dtype='f') * default
 
 final_mosaic = cut_image(combined_image_of_tops_and_bottoms.data)
 #final_mosaic = final_cut(image_cut_intermediate)  # not necessary
-
