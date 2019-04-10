@@ -16,8 +16,8 @@ import matplotlib.pyplot as plt
 import astroalign as aa
 from astropy.io import fits
 
-import sep
-sep.set_extract_pixstack(1e6)
+# import sep
+# sep.set_extract_pixstack(1e6)
 
 
 ##### Data importation ###############################################
@@ -82,7 +82,7 @@ def fusion_of_2_images(im1, im2, rows, columns):
     return im1
 
 
-def cut_distorsion_of_boarder(image, h_boarder, v_boarder):
+def cut_distorsion_of_boarder(image, boarder):
     """Cut all sides of the image by a band of width 'cut_boarder'
 
     Return the same image, cropped. The pixels 'removed are in reality
@@ -102,10 +102,10 @@ def cut_distorsion_of_boarder(image, h_boarder, v_boarder):
         image (array-like): the image cropped.
 
     """
-    image[:, 0:cut_boarder] = h_boarder
-    image[:, N[1] - cut_boarder:N[1]] = h_boarder
-    image[0:cut_boarder, :] = v_boarder
-    image[(N[0] - cut_boarder):N[0], :] = v_boarder
+    image[:, 0:cut_boarder] = boarder
+    image[:, N[1] - cut_boarder:N[1]] = boarder
+    image[0:cut_boarder, :] = boarder
+    image[(N[0] - cut_boarder):N[0], :] = boarder
     return image
 
 
@@ -134,14 +134,14 @@ def adding_frame_to_image(image, place):
             on the boarder. Wil be used to remove distorsions later on.
 
     """
-    image_with_frame = np.copy(frame)
-
-    mask_of_normal_size = np.copy(mask_normal_size)
-    mask_with_frame = np.copy(frame_mask)
+    #median_im = np.median(image)
+    image_with_frame = np.full_like(frame, median)
+    mask_of_normal_size = np.zeros_like(image)
+    mask_with_frame = np.ones_like(image_with_frame)
 
     # Cut the distorsion on the boarder of the initial image:
-    image = cut_distorsion_of_boarder(image, 0, 0)
-    mask_of_normal_size = cut_distorsion_of_boarder(mask_of_normal_size, 1, 1)
+    image = cut_distorsion_of_boarder(image, median)
+    mask_of_normal_size = cut_distorsion_of_boarder(mask_of_normal_size, 1)
 
     if place == 'top_right':
         rows = range(N[0] - 1 + int(add_frame / 2), 2 * N[0] - 1 + int(add_frame / 2))
@@ -180,6 +180,10 @@ def adding_frame_to_image(image, place):
     save_image(image_with_frame, place)
     save_image(mask_with_frame, place_of_mask)
 
+    fig, axes = plt.subplots(1, 2)
+    axes[0].imshow(image_with_frame, cmap='flag')
+    axes[1].imshow(mask_with_frame, cmap='flag')
+
     new_image = np.ma.array(image_with_frame, mask=mask_with_frame)
 
     return new_image
@@ -212,35 +216,38 @@ def alignment(source, target, name):
     transf, (source_list, target_list) = aa.find_transform(source, target)
 
     aligned_image = aa.apply_transform(transf, source, target)
+    #save_image(aligned_image.mask, '1_mask_test' + name)
     mask_aligned_image = aa.apply_transform(transf, source.mask, target)
-
+    print(type(aligned_image))
     save_image(aligned_image, '2_aligned_image' + name)
     save_image(mask_aligned_image, '2_mask_aligned_image' + name)
 
     image_area = np.where(mask_aligned_image == 0)
 
-    new_aligned_image = np.copy(frame_mask)*0
+    #median = aligned_image.data
+    print(aligned_image.data)
+    new_aligned_image = np.full_like(frame, median)
     new_aligned_image[image_area] = aligned_image[image_area]
 
     save_image(new_aligned_image, '3_aligned_image_purified' + name)
 
-    new_aligned_image_combined = new_aligned_image + target.data
-    save_image(new_aligned_image_combined, '4_test' +name)
-    common_area = np.where((new_aligned_image > 0) & (target.data > 0))
+    target_area = np.where((target.mask == 0) & (mask_aligned_image != 0))
+    new_aligned_image[target_area] = target.data[target_area]
+    save_image(new_aligned_image, '4_test' + name)
+    common_area = np.where((mask_aligned_image == 0) & (target.mask == 0))  # or (new_aligned_image != median) & (target.data != target.data[0, 0]))
 
-    new_aligned_image_combined[common_area] = new_aligned_image_combined[common_area]/2.
+    new_aligned_image[common_area] = (new_aligned_image[common_area] + target.data[common_area])/2.  # or target.data[common_area]
 
-    save_image(new_aligned_image_combined, '4_aligned_image_combined' + name)
+    save_image(new_aligned_image, '4_aligned_image_combined' + name)
 
-    mask_source = np.where(mask_aligned_image == 0)
     mask_target = np.where(target.mask == 0)
-    new_mask_aligned_image = np.copy(frame_mask)
-    new_mask_aligned_image[mask_source] = mask_aligned_image[mask_source]
-    new_mask_aligned_image[mask_target] = target.mask[mask_target]
+    new_mask_aligned_image = np.ones_like(frame)
+    new_mask_aligned_image[image_area] = 0  # mask_aligned_image[image_area]
+    new_mask_aligned_image[mask_target] = 0  # target.mask[mask_target]
 
     save_image(new_mask_aligned_image, '4_mask_aligned_image_combined' + name)
 
-    mosaic = np.ma.array(new_aligned_image_combined, mask=new_mask_aligned_image)
+    mosaic = np.ma.array(new_aligned_image, mask=new_mask_aligned_image)
 
     return mosaic
 
@@ -473,17 +480,18 @@ cut_boarder = 50  # The boarder of initial images are too noisy, so we cut them 
                   # between all images when thay will be aligned.
 add_frame = 400
 
-frame = np.zeros((2 * N[0] + add_frame, 2 * N[1] + add_frame), dtype='f') # image_with_bigger_size
+frame = np.ones((2 * N[0] + add_frame, 2 * N[1] + add_frame), dtype='f') # image_with_bigger_size
 
-frame_mask = np.ones((2 * N[0] + add_frame, 2 * N[1] + add_frame), dtype='int')  # image_with_bigger_size_mask
+#frame_mask = np.ones((2 * N[0] + add_frame, 2 * N[1] + add_frame), dtype='int')  # image_with_bigger_size_mask
 
-mask_normal_size = np.zeros((N[0], N[1]), dtype='int')  # image normal size
+#mask_normal_size = np.zeros((N[0], N[1]), dtype='int')  # image normal size
+#median = []
 
 # To cut the boarder of the initial images, replace it with a rectangular boarder with all pixels
 # set to default:
-horizontal_boarder = np.ones((N[0], cut_boarder), dtype='f')
-vertical_boarder = np.ones((cut_boarder, N[1]), dtype='f')
-
+# horizontal_boarder = np.ones((N[0], cut_boarder), dtype='f')
+# vertical_boarder = np.ones((cut_boarder, N[1]), dtype='f')
+median = np.median(image_data1)
 image_top_right = adding_frame_to_image(image_data1, 'top_right')
 image_top_left = adding_frame_to_image(image_data2, 'top_left')
 image_bottom_left = adding_frame_to_image(image_data3, 'bottom_left')
