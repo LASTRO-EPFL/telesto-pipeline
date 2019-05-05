@@ -2,7 +2,7 @@ import os
 import shutil
 
 # Folder creation
-path = os.path.dirname(os.path.abspath('__Tri.py__'))
+path = os.path.dirname(os.path.abspath('__Sorting.py__'))
 if not os.path.exists(path+'\images'):  #
     os.mkdir(path+'\images')
 if not os.path.exists(path+'\Flat_field'):
