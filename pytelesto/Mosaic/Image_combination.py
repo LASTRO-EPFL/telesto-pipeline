@@ -1,45 +1,35 @@
 """
-IMAGE_COMBINATION /Combination of all the images of a same portion of the
-sky but with different exposure time, into one single images (mean of the
-images pixel by pixel).
+IMAGE_COMBINATION: Combination and alignment of all the patches of a same portion
+of the sky, into one single images (mean of the images pixel by pixel).
 """
 
-##### Library #########################################################
+from Image_combination_functions import image_combination_choosing_patch, image_combination_using_all_patch
+from Mosaic_basic_function import save_image
+import os
 
-import numpy as np
-import astropy.io as astro
-import glob
-import astroalign as aa
+os.makedirs('Mosaic', exist_ok=True)
+os.makedirs('Mosaic_all_patch', exist_ok=True)
 
+save_all_steps = True
 
-from astropy.visualization import astropy_mpl_style
-from astropy.utils.data import get_pkg_data_filename
-from astropy.io import fits
-from astropy.wcs import WCS
-from astropy.io import ascii
-from astropy.table import Table, Column, MaskedColumn
+# Optimizing the noise:
+image1 = image_combination_choosing_patch(1, save_all_steps)
+image2 = image_combination_choosing_patch(2, save_all_steps)
+image3 = image_combination_choosing_patch(3, save_all_steps)
+image4 = image_combination_choosing_patch(4, save_all_steps)
 
-##### Teatment of the images #########################################
+save_image(image1, '.\Mosaic\image_top_right', True)
+save_image(image2, '.\Mosaic\image_top_left', True)
+save_image(image3, '.\Mosaic\image_bottom_left', True)
+save_image(image4, '.\Mosaic\image_bottom_right', True)
 
-def image_combination(k):
-    name_all_images = glob.glob('.\February 12 2019\patch%d*.fit' % k)
+# Using all patches:
+image1_all_patch = image_combination_using_all_patch(1, save_all_steps)
+image2_all_patch = image_combination_using_all_patch(2, save_all_steps)
+image3_all_patch = image_combination_using_all_patch(3, save_all_steps)
+image4_all_patch = image_combination_using_all_patch(4, save_all_steps)
 
-    image_file0 = get_pkg_data_filename(name_all_images[0])
-    image_data0 = astro.fits.getdata(image_file0, ext=0)
-
-    for i in range(1,len(name_all_images)-1):
-        image_file = get_pkg_data_filename(name_all_images[i])
-        image_data = astro.fits.getdata(image_file, ext=0)
-        image_data0 = (image_data0 + image_data)/2
-
-    hdu = fits.PrimaryHDU(image_data0)
-    hdul = fits.HDUList([hdu])
-    hdul.writeto('patch%d_combined.fit' % k)
-
-    return image_data0
-
-image1 = image_combination(1)
-image2 = image_combination(2)
-image3 = image_combination(3)
-image4 = image_combination(4)
-
+save_image(image1, '.\Mosaic_all_patch\image_top_right', True)
+save_image(image2, '.\Mosaic_all_patch\image_top_left', True)
+save_image(image3, '.\Mosaic_all_patch\image_bottom_left', True)
+save_image(image4, '.\Mosaic_all_patch\image_bottom_right', True)
