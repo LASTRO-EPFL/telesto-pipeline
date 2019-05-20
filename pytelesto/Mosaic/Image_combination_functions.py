@@ -6,9 +6,12 @@ and the alignment of the patches.
 import astropy.io as astro
 import glob
 import astroalign as aa
+from astropy.io import fits
 from astropy.utils.data import get_pkg_data_filename
 from astropy.io import fits
 import numpy as np
+import random
+import itertools
 from Mosaic_basic_function import save_image
 
 
@@ -97,15 +100,73 @@ def open_all_images(k, save_steps):
 
     noise = []
     image_data = {}
-    for i in range(0, len(name_all_images) - 1):
-        image_file = get_pkg_data_filename(name_all_images[i])
-        image_data['image%d' % i] = astro.fits.getdata(image_file, ext=0)
+    for i in range(0, len(name_all_images)):
+        image_data['image%d' % i] = fits.open(name_all_images[i])[0].data
         noise.append(noise_calculation(image_data['image%d' % i], k, save_steps))
+
+        #rajouté:
+        if i > 0:
+            image_data['image%d' % i] = aa.register(image_data['image%d' % i], image_data['image0'])
+
+
+    # for i in range(0, len(name_all_images)):
+    #     if i != 5:
+    #         image_data['image%d' % i] = aa.register(image_data['image%d' % i], image_data['image5'])
 
     return image_data, noise, len(name_all_images)
 
 
-def image_combination_choosing_patch(k, save_steps):
+# def image_combination_choosing_patch(k, save_steps):
+#     """
+#     Aligned the patches and combined them trying to optimize
+#     the noise.
+#
+#     Return a mean image of the patches chosen in the optimization
+#     of the noise.
+#
+#     Args:
+#          k (int): number of the image (1, 2, 3 or 4)
+#             depending on what part of the mosaic the
+#             image corresponds to (top, bottom, right,
+#             left).
+#
+#         save_steps (string): True if you want to save
+#            transitory steps.
+#
+#     Return:
+#         image_mid (array-like): mean of the chosen patches
+#             previously aligned.
+#     """
+#     image_data, noise, n = open_all_images(k, save_steps)
+#
+#     # We align w.r.t the image with the smallest noise.
+#     index = noise.index(min(noise))
+#     min_noise = noise[index]
+#
+#     image_data0 = image_data['image%d' % index]
+#     image_mid = image_data0
+#
+#     for i in range(0, n-1):
+#         if i != index:
+#             image_aligned = aa.register(image_data['image%d' % i], image_data0)
+#             new_image_mid = (image_mid + image_aligned)/2
+#
+#             new_noise = noise_calculation(new_image_mid, k, save_steps)
+#
+#             # We keep the combination of the image with the new_patch only
+#             # if the noise of the later improve the global quality:
+#             if new_noise < min_noise:
+#                 image_mid = new_image_mid
+#                 min_noise = new_noise
+#             else:
+#                 print('We did not use patch',  i+1, 'for image', k)
+#
+#     save_image(image_mid, 'patch%d_aligned_and_combined' % k, save_steps)
+#
+#     return image_mid
+
+
+def optimal_number_patch(k, save_steps):
     """
     Aligned the patches and combined them trying to optimize
     the noise.
@@ -128,31 +189,53 @@ def image_combination_choosing_patch(k, save_steps):
     """
     image_data, noise, n = open_all_images(k, save_steps)
 
-    # We align w.r.t the image with the smallest noise.
-    index = noise.index(min(noise))
-    min_noise = noise[index]
+    mean_noise_for_m_images = []
 
-    image_data0 = image_data['image%d' % index]
-    image_mid = image_data0
+    # nombre de patchs combinés:
+    for i in range(1, n+1):
+        noise = []
+        # 4 combinaisons de attemps_num images:
+        for attempt_num in range(0, 4):
+            sampling = random.sample(range(0, n), k=i)
+            print(sampling)
+            image_aligned = image_data['image%d' % sampling[0]]
 
-    for i in range(0, n-1):
-        if i != index:
-            image_aligned = aa.register(image_data['image%d' % i], image_data0)
-            new_image_mid = (image_mid + image_aligned)/2
+            if i > 1:
+                # parcours des patch choisis:
+                for j in sampling[1:-1]:
+                    image_aligned = image_aligned + image_data['image%d' % j]
 
-            new_noise = noise_calculation(new_image_mid, k, save_steps)
+            mean_image = image_aligned/len(sampling)
+            noise.append(noise_calculation(mean_image, k, save_steps))
 
-            # We keep the combination of the image with the new_patch only
-            # if the noise of the later improve the global quality:
-            if new_noise < min_noise:
-                image_mid = new_image_mid
-                min_noise = new_noise
-            else:
-                print('We did not use patch',  i+1, 'for image', k)
+        mean_noise_for_m_images.append(np.mean(noise))
+        print(np.mean(noise), '-', (np.mean(noise)-min(noise))/2., '+', (max(noise)-np.mean(noise))/2.)
 
-    save_image(image_mid, 'patch%d_aligned_and_combined' % k, save_steps)
+    return mean_noise_for_m_images.index(min(mean_noise_for_m_images)) + 1, image_data, n
 
-    return image_mid
+# def testing_all_combination(start, stop):
+#     for i in range(start, stop):
+
+
+def image_combination_choosing_patch(k, save_steps):
+    number_images, image_data, n = optimal_number_patch(k, save_steps)
+    rms = 10000  # arbitrary number
+
+    for p in itertools.combinations(range(0, n), number_images):
+        image = image_data['image%d' % p[0]]
+        for i in p[1:-1]:
+            image = image + image_data['image%d' % i]
+
+        image = image/len(p)
+        new_rms = noise_calculation(image, k, save_steps)
+        if new_rms < rms:
+            optimal_image = image
+            optimal_p = p
+            rms = new_rms
+
+    print('Optimal image uses patch: ', optimal_p, 'which have rms value:', rms)
+
+    return optimal_image
 
 
 def image_combination_using_all_patch(k, save_steps):
@@ -176,14 +259,48 @@ def image_combination_using_all_patch(k, save_steps):
     """
     image_data, noise, n = open_all_images(k, save_steps)
 
-    image_data0 = image_data['image0']
-    image_mid = image_data0
+    image = image_data['image0']
 
     for i in range(1, n-1):
-        image_aligned = aa.register(image_data['image%d' %i], image_data0)
-        image_mid = (image_mid + image_aligned)/2
+        #image_aligned = aa.register(image_data['image%d' %i], image_data0)
+        image = image + image_data['image%d' % i]
 
-    save_image(image_mid, 'patch%d_aligned_and_combined_using_all_patch' % k, save_steps)
+    image = image/n
 
-    return image_mid
+    save_image(image, 'patch%d_aligned_and_combined_using_all_patch' % k, save_steps)
 
+    return image
+
+
+# def image_combination_using_all_patch(k, save_steps):
+#     """
+#     Aligned all patches and combined them.
+#
+#     Return a mean image of the patches.
+#
+#     Args:
+#          k (int): number of the image (1, 2, 3 or 4)
+#             depending on what part of the mosaic the
+#             image corresponds to (top, bottom, right,
+#             left).
+#
+#         save_steps (string): True if you want to save
+#            transitory steps.
+#
+#     Return:
+#         image_mid (array-like): mean of all patches
+#             previously aligned.
+#     """
+#     image_data, noise, n = open_all_images(k, save_steps)
+#
+#     image_data0 = image_data['image0']
+#     image_mid = image_data0
+#
+#     for i in range(1, n-1):
+#         image_aligned = aa.register(image_data['image%d' %i], image_data0)
+#         image_mid = (image_mid + image_aligned)/2
+#
+#     save_image(image_mid, 'patch%d_aligned_and_combined_using_all_patch' % k, save_steps)
+#
+#     return image_mid
+#
