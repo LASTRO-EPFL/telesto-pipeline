@@ -12,7 +12,8 @@ that :
 import os
 from astropy.io import fits
 from pylab import *
-from Mosaic_functions import disp_func, adding_frame_to_image, alignment, cut_image
+from PIL import Image
+from Mosaic_functions import disp_func, adding_frame_to_image, alignment, cut_image, histogram, combined_images
 from Mosaic_basic_function import save_image
 
 if len(os.listdir('.\Mosaic')) == 4:
@@ -47,6 +48,9 @@ has an offset in both x and y direction. The new pixels, surrounding
 the initial image are fixed to a default value (must be much bigger
 than 0 so it works).
 """
+
+# cmap used for the plot:
+map = 'gist_ncar'
 
 # Suppose all images have the same shape:
 N = image_data1.shape
@@ -93,13 +97,13 @@ image_bottom_right = adding_frame_to_image(image_data4, 'bottom_right', frame, m
 
 fig, axes = plt.subplots(2, 2, figsize=(10, 10))
 ax = axes[0, 0]
-ax.imshow(disp_func(image_top_left), origin='lower', cmap='gist_stern')
+ax.imshow(disp_func(image_top_left), origin='lower', cmap=map)
 ax = axes[0, 1]
-ax.imshow(disp_func(image_top_right), origin='lower', cmap='gist_stern')
+ax.imshow(disp_func(image_top_right), origin='lower', cmap=map)
 ax = axes[1, 0]
-ax.imshow(disp_func(image_bottom_left), origin='lower', cmap='gist_stern')
+ax.imshow(disp_func(image_bottom_left), origin='lower', cmap=map)
 ax = axes[1, 1]
-ax.imshow(disp_func(image_bottom_right), origin='lower', cmap='gist_stern')
+ax.imshow(disp_func(image_bottom_right), origin='lower', cmap=map)
 plt.show()
 
 combined_image_of_tops = alignment(image_top_left, image_top_right, '_tops', frame, save_all_steps)
@@ -110,20 +114,35 @@ combined_image_of_tops_and_bottom = alignment(image_bottom_left, combined_image_
 combined_image_of_tops_and_bottoms = alignment(image_bottom_right, combined_image_of_tops_and_bottom,
                                                '_tops_and_bottoms', frame, save_all_steps)
 
+# Decomment this section to align images with method 2 (see report), this section can be suppressed from the code:
+# top_left = alignment(image_top_left, image_top_right, '_top_left', frame, save_all_steps)
+#
+# bottom_left = alignment(image_bottom_left, image_top_right, '_bottom_left', frame, save_all_steps)
+#
+# bottom_right = alignment(image_bottom_right, image_top_right, '_bottom_right', frame, save_all_steps)
+#
+# combined_image_of_tops = combined_images(top_left, image_top_right, '_tops', save_all_steps)
+#
+# combined_image_of_tops_and_bottom = combined_images(bottom_left, combined_image_of_tops, '_tops_and_bottom',
+#                                                     save_all_steps)
+#
+# combined_image_of_tops_and_bottoms = combined_images(bottom_right, combined_image_of_tops_and_bottom,
+#                                                      '_tops_and_bottoms', save_all_steps)
+
 fig, axes = plt.subplots(2, 2, figsize=(10, 10))
 ax = axes[0, 0]
-ax.imshow(disp_func(combined_image_of_tops), origin='lower', cmap='flag')
+ax.imshow(disp_func(combined_image_of_tops), origin='lower', cmap=map)
 ax = axes[0, 1]
-ax.imshow(disp_func(combined_image_of_tops_and_bottom), origin='lower', cmap='flag')
+ax.imshow(disp_func(combined_image_of_tops_and_bottom), origin='lower', cmap=map)
 ax = axes[1, 0]
-ax.imshow(disp_func(combined_image_of_tops_and_bottoms), origin='lower', cmap='flag')
+ax.imshow(disp_func(combined_image_of_tops_and_bottoms), origin='lower', cmap=map)
 plt.show()
 
 final_mosaic = cut_image(combined_image_of_tops_and_bottoms, save_all_steps)
 
 fig, axes = plt.subplots()
 axes = gca()
-axes.imshow(disp_func(final_mosaic), cmap='flag')
+axes.imshow(disp_func(final_mosaic), cmap=map)
 starty, endy = axes.get_ylim()
 axes.yaxis.set_ticks(np.arange(starty, endy, 100))
 axes.xaxis.set_major_locator(MultipleLocator(500))
@@ -150,7 +169,7 @@ while not satisfied:
 
     fig, axes = plt.subplots()
     axes = gca()
-    axes.imshow(disp_func(final_mosaic_crop), cmap='flag')
+    axes.imshow(disp_func(final_mosaic_crop), cmap=map)
     starty, endy = axes.get_ylim()
     axes.yaxis.set_ticks(np.arange(starty, endy, 100))
     axes.xaxis.set_major_locator(MultipleLocator(500))
@@ -165,11 +184,14 @@ while not satisfied:
     axes.set_ylabel('pixels')
     plt.show()
 
+    final_mosaic_corrected = histogram(final_mosaic_crop, True)  # To put here of after the loop
+
     satisfied = input('Are you satisfied with the shape of this image? (Yes/No)')
     if satisfied == 'Yes' or satisfied == 'yes' or satisfied == 'y' or satisfied == 'Y':
         satisfied = True
-        save_image(final_mosaic_crop, '6_final_mosaic_crop', save_all_steps)
+        save_image(final_mosaic_crop, '6_final_mosaic_crop', True)
     elif satisfied == 'No' or satisfied == 'no' or satisfied == 'n' or satisfied == 'N':
         satisfied = False
     else:
         raise Exception('Invalid entry, tou should enter: Yes or No')
+
