@@ -1,0 +1,24 @@
+**Main_Reducing_process** is a code that will reduce images from row data to reduced, aligned and combined ones.
+It does it in a following way :
+
+- Sort the images (Flat field, Dark frames and image) in 3 different folders : images, Dark_frame, Flat_filed.
+- Reduce the images by calculating the Master Dark and the Master Flat.
+- Sort the reduced images by object (Chech the right ascension and the declination of each image and compare them).
+	it creates 1 folder by object and fill them accordingly.
+- Align all the images on one reference image (the first image of the folder "Object_X")
+- Combine the images filter by filter.
+- Solve the difference of resolution between then filter by applying appropriated Gaussian filters.
+
+## REQUIREMENTS
+packages:	- os
+		- shutil
+		- numpy (1.16.3)
+		- astropy (1.0.4)
+		- astroalign (1.0.4)
+		- matplotlib (3.1.0)
+		- scipy (1.12.0)
+
+Initial folder :
+the code "Main_Reducing_process" and the images (raw images, Dark frames, Flat fields) has to be inside
+ the same folder. All the Dark frames shoul have "Dark" in their file name and all the Flat fields should have 
+"FlatField" in their file name.
